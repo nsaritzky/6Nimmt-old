@@ -1,26 +1,21 @@
-import React from 'react';
-import logo from './logo.svg';
-import './App.css';
+import { Local } from "boardgame.io/multiplayer"
+import { Client } from "boardgame.io/react"
+import { SixNimmt } from "./Game"
+import SixNimmtBoard from "./Board"
 
-function App() {
-  return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.tsx</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+const SixNimmtClient = Client({
+    game: SixNimmt,
+    board: SixNimmtBoard,
+    multiplayer: Local(),
+})
+
+const App = () => (
+    <div>
+        <h1>Player 0</h1>
+        <SixNimmtClient playerID="0" />
+        <h1>Player 1</h1>
+        <SixNimmtClient playerID="1" />
     </div>
-  );
-}
+)
 
-export default App;
+export default App
