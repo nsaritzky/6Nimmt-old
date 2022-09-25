@@ -1,4 +1,4 @@
-import { bulls } from './types';
+import { bulls, card } from "./types"
 
 const cards: bulls[] = [
     1, // 1
@@ -105,5 +105,10 @@ const cards: bulls[] = [
     1, // 103
     1, // 104
 ]
+
+export const sortedDeck: card[] = cards.map((bulls, val) => ({
+    val: val + 1,
+    bulls: bulls,
+}))
 
 export default cards

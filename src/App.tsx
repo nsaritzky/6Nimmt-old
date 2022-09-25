@@ -4,18 +4,18 @@ import { SixNimmt } from "./Game"
 import SixNimmtBoard from "./Board"
 
 const SixNimmtClient = Client({
-  game: SixNimmt,
-  board: SixNimmtBoard,
-  multiplayer: Local(),
+    game: SixNimmt,
+    board: SixNimmtBoard,
+    multiplayer: Local(),
 })
 
 const App = () => (
-  <div>
-    <h1>Player 0</h1>
-    <SixNimmtClient playerID="0" />
-    <h1>Player 1</h1>
-    <SixNimmtClient playerID="1" />
-  </div>
+    <div>
+        <h1>Player 0</h1>
+        <SixNimmtClient playerID="0" />
+        <h1>Player 1</h1>a
+        <SixNimmtClient playerID="1" />
+    </div>
 )
 
 export default App
