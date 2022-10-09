@@ -94,7 +94,8 @@ const eatPile: Move<GameState> = (
     (score, { bulls }) => score + bulls,
     0
   )
-  G.piles[pileIndex] = []
+  // G.piles[pileIndex] = []
+  return G
 }
 // G.players[ctx.currentPlayer].score += G.piles[pileIndex].reduce(
 //   (score, { bulls }) => score + bulls,
@@ -124,6 +125,45 @@ const eatPile: Move<GameState> = (
 //   },
 // }
 
+export const resolveCard: Move<GameState> = (G, ctx) => {
+  console.log(`resolving card for player ${ctx.currentPlayer}`)
+  const curr = G.players[ctx.currentPlayer]
+  const thisPile = G.piles[curr.selectedPile!]
+
+  if (!curr.playedCard) {
+    // Added this as a workaround for the double-calling of this function at
+    // the end of each round.
+    console.log(
+      `resolveCard: No played card for Player ${ctx.currentPlayer}; skipping resolution`
+    )
+  } else {
+    if (thisPile) {
+      // G = thisPile.length >= 5 ? eatPile(G, ctx, curr.selectedPile) : G
+      if (thisPile.length >= 5) {
+        G = eatPile(G, ctx, curr.selectedPile)
+        G.piles[curr.selectedPile!] = []
+      }
+      thisPile.push(curr.playedCard)
+    }
+
+    delete curr.playedCard
+    delete curr.resolveOrder
+
+    // const { playedCard, resolveOrder, ...rest } = curr
+    // return {
+    //   ...G,
+    //   piles: {
+    //     ...G.piles,
+    //     [curr.selectedPile!]: G.piles[curr.selectedPile!].push(curr.playedCard!),
+    //   },
+    //   players: {
+    //     ...G.players,
+    //     [ctx.currentPlayer]: rest,
+    //   },
+    // }
+  }
+}
+
 export const selectPile: Move<GameState> = (G, ctx) => {
   if (!G.piles.every((p) => p.length > 0)) {
     throw Error("selectPile: One or more of the piles is empty when it shouldn't be")
@@ -149,45 +189,8 @@ export const selectPile: Move<GameState> = (G, ctx) => {
       })
     } else {
       curr.selectedPile = autoSelect
+      resolveCard(G, ctx)
     }
-  }
-}
-
-export const resolveCard: Move<GameState> = (G, ctx) => {
-  console.log(`resolving card for player ${ctx.currentPlayer}`)
-  const curr = G.players[ctx.currentPlayer]
-  const thisPile = G.piles[curr.selectedPile!]
-
-  if (!curr.playedCard) {
-    // Added this as a workaround for the double-calling of this function at
-    // the end of each round.
-    console.log(
-      `resolveCard: No played card for Player ${ctx.currentPlayer}; skipping resolution`
-    )
-  } else {
-    if (thisPile) {
-      // G = thisPile.length >= 5 ? eatPile(G, ctx, curr.selectedPile) : G
-      if (thisPile.length >= 5) {
-        G = eatPile(G, ctx, curr.selectedPile)
-      }
-      thisPile.push(curr.playedCard)
-    }
-
-    delete curr.playedCard
-    delete curr.resolveOrder
-
-    // const { playedCard, resolveOrder, ...rest } = curr
-    // return {
-    //   ...G,
-    //   piles: {
-    //     ...G.piles,
-    //     [curr.selectedPile!]: G.piles[curr.selectedPile!].push(curr.playedCard!),
-    //   },
-    //   players: {
-    //     ...G.players,
-    //     [ctx.currentPlayer]: rest,
-    //   },
-    // }
   }
 }
 
@@ -205,6 +208,7 @@ const choosePileMove = (G: GameState, ctx: Ctx, pileIndex: number) => {
   G.players[ctx.currentPlayer].selectedPile = pileIndex
   G = eatPile(G, ctx, pileIndex)
   ctx.events!.endStage()
+  G = resolveCard(G, ctx)
 }
 
 const endGame: Move<GameState> = (G) => {
@@ -271,7 +275,6 @@ export const SixNimmt: Game<GameState> = {
           },
         },
         onBegin: selectPile,
-        onEnd: resolveCard,
       },
       // TODO This hook triggers turn end (again), which runs resolveCard. But
       // there's no card to resolve, so it fails.
