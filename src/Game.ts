@@ -1,18 +1,13 @@
 import cardData from "./cards"
-import type { Ctx, Game, Move, PlayerID } from "boardgame.io"
-import { ActivePlayers, Stage, TurnOrder } from "boardgame.io/core"
+import type { Ctx, Game, Move, PlayerID, FnContext } from "boardgame.io"
 import { GameState, card, PlayerState, Piles, PublicState } from "./types"
 import { filterWithIndex } from "fp-ts/Record"
-import { NonEmptyArray } from "fp-ts/NonEmptyArray"
-import { omit } from "fp-ts-std/Struct"
-import produce from "immer"
-import { flow } from "fp-ts/function"
-import { append } from "fp-ts/array"
+import { ActivePlayers, TurnOrder } from "boardgame.io/core"
 
-const stripSecrets = (
+const playerView = (
   { piles, players }: GameState,
   _ctx: Ctx,
-  playerID: PlayerID
+  playerID: PlayerID | null
 ): PublicState => {
   // const isNotThisPlayer: Predicate<PlayerID> = (id, _) => id != playerID
   return {
@@ -28,9 +23,9 @@ const sortedDeck: card[] = cardData.map((bulls, val) => ({
   bulls,
 }))
 
-const setup: typeof SixNimmt.setup = (ctx) => {
+const setup: typeof SixNimmt.setup = ({ ctx, random }) => {
   const players: Record<PlayerID, PlayerState> = {}
-  const deck = ctx.random!.Shuffle(sortedDeck)
+  const deck = random!.Shuffle(sortedDeck)
   // The deck is full, so these shift calls will all succeed.
   const piles: Piles = [
     [deck.shift()!],
@@ -59,7 +54,7 @@ const setup: typeof SixNimmt.setup = (ctx) => {
 
 // Play Phase /////////////////////////////////////////////////////////////////
 
-export const drawCards: Move<GameState> = (G, ctx, n = 1) => {
+export const drawCards: Move<GameState> = ({ G, ctx }, n = 1) => {
   for (let i = 0; i < n; ++i) {
     const newCard = G.deck.pop()
     if (newCard) {
@@ -69,13 +64,11 @@ export const drawCards: Move<GameState> = (G, ctx, n = 1) => {
 }
 
 export const playCard: Move<GameState> = (
-  G,
-  ctx,
+  { G, ctx },
   cardIndex: number,
   playerID: PlayerID
 ) => {
   const curr = G.players[playerID]
-  ctx.log!.setMetadata(`Played card ${curr.hand[cardIndex].val}`)
   curr.playedCard = curr.hand.splice(cardIndex, 1)[0]
   // If everyone has played, work out the resolution phase order
   if (Object.values(G.players).every((p) => p.playedCard)) {
@@ -83,88 +76,17 @@ export const playCard: Move<GameState> = (
   }
 }
 
-// Resolve Phase //////////////////////////////////////////////////////////////
-
-const eatPile: Move<GameState> = (
-  G,
-  ctx,
-  pileIndex: number // {
-) => {
-  G.players[ctx.currentPlayer].score += G.piles[pileIndex].reduce(
-    (score, { bulls }) => score + bulls,
-    0
-  )
-  // G.piles[pileIndex] = []
+const determineResolutionOrder = (G: GameState) => {
+  G.resolveOrder = Object.entries(G.players)
+    .sort(
+      ([_idA, playerA], [_idB, playerB]) =>
+        playerA.playedCard!.val - playerB.playedCard!.val
+    )
+    .map(([id, _]) => id)
   return G
 }
-// G.players[ctx.currentPlayer].score += G.piles[pileIndex].reduce(
-//   (score, { bulls }) => score + bulls,
-//   0
-// )
-// const playedCard = G.players[ctx.currentPlayer].playedCard
-// if (!playedCard) {
-//   throw Error(`eatPile: No played card for Player ${ctx.currentPlayer}`)
-// } else {
-//   G.piles[pileIndex] = []
-// }
-// ctx.log!.setMetadata(
-//   `Selected Pile: ${pileIndex}, Card: ${G.players[ctx.currentPlayer].playedCard!.val}`
-// )
-// console.log(`${G.piles[pileIndex].reduce((score, { bulls }) => score + bulls, 0)}`)
-// return {
-//   ...G,
-//   piles: { ...G.piles, [pileIndex]: [] },
-//   players: {
-//     ...G.players,
-//     [ctx.currentPlayer]: {
-//       ...G.players[ctx.currentPlayer],
-//       score:
-//         G.players[ctx.currentPlayer].score +
-//         G.piles[pileIndex].reduce((score, { bulls }) => score + bulls, 0),
-//     },
-//   },
-// }
 
-export const resolveCard: Move<GameState> = (G, ctx) => {
-  console.log(`resolving card for player ${ctx.currentPlayer}`)
-  const curr = G.players[ctx.currentPlayer]
-  const thisPile = G.piles[curr.selectedPile!]
-
-  if (!curr.playedCard) {
-    // Added this as a workaround for the double-calling of this function at
-    // the end of each round.
-    console.log(
-      `resolveCard: No played card for Player ${ctx.currentPlayer}; skipping resolution`
-    )
-  } else {
-    if (thisPile) {
-      // G = thisPile.length >= 5 ? eatPile(G, ctx, curr.selectedPile) : G
-      if (thisPile.length >= 5) {
-        G = eatPile(G, ctx, curr.selectedPile)
-        G.piles[curr.selectedPile!] = []
-      }
-      thisPile.push(curr.playedCard)
-    }
-
-    delete curr.playedCard
-    delete curr.resolveOrder
-
-    // const { playedCard, resolveOrder, ...rest } = curr
-    // return {
-    //   ...G,
-    //   piles: {
-    //     ...G.piles,
-    //     [curr.selectedPile!]: G.piles[curr.selectedPile!].push(curr.playedCard!),
-    //   },
-    //   players: {
-    //     ...G.players,
-    //     [ctx.currentPlayer]: rest,
-    //   },
-    // }
-  }
-}
-
-export const selectPile: Move<GameState> = (G, ctx) => {
+const autoSelect = ({ G, ctx, events }: FnContext<GameState>) => {
   if (!G.piles.every((p) => p.length > 0)) {
     throw Error("selectPile: One or more of the piles is empty when it shouldn't be")
   }
@@ -180,59 +102,53 @@ export const selectPile: Move<GameState> = (G, ctx) => {
           ...G.piles.map((p) => c.val - p[p.length - 1].val).filter((n) => n > 0)
         )
     )
-    ctx.log!.setMetadata({ autoSelect })
     if (autoSelect === -1) {
-      ctx.events!.setActivePlayers({
+      events.setActivePlayers({
         currentPlayer: "playerSelection",
         minMoves: 1,
         maxMoves: 1,
       })
     } else {
-      curr.selectedPile = autoSelect
-      resolveCard(G, ctx)
+      if (G.piles[autoSelect].length >= 5) {
+        G.players[ctx.currentPlayer].score += devourPileScore(G, autoSelect)
+        G.piles[autoSelect] = []
+      }
+      G.piles[autoSelect].push(c)
+      delete curr.resolveOrder
+      delete curr.playedCard
+      events.endTurn()
     }
   }
 }
 
-const determineResolutionOrder = (G: GameState) => {
-  G.resolveOrder = Object.entries(G.players)
-    .sort(
-      ([_idA, playerA], [_idB, playerB]) =>
-        playerA.playedCard!.val - playerB.playedCard!.val
-    )
-    .map(([id, _]) => id)
-  return G
-}
+const devourPileScore = (G: GameState, pileIndex: number): number =>
+  G.piles[pileIndex].reduce((score, { bulls }) => score + bulls, 0)
 
-const choosePileMove = (G: GameState, ctx: Ctx, pileIndex: number) => {
-  G.players[ctx.currentPlayer].selectedPile = pileIndex
-  G = eatPile(G, ctx, pileIndex)
-  ctx.events!.endStage()
-  G = resolveCard(G, ctx)
-}
-
-const endGame: Move<GameState> = (G) => {
-  if (Object.values(G.players).every((p) => p.hand.length == 0 && !p.playedCard)) {
-    const topScore = Math.max(...Object.values(G.players).map((p) => p.score))
-    return {
-      winner: Object.entries(G.players).find(([id, p]) => p.score === topScore)![0],
-    }
-  }
+const choosePileMove: Move<GameState> = (
+  { G, ctx, playerID, events },
+  pileIndex: number
+) => {
+  G.players[ctx.currentPlayer].score += devourPileScore(G, pileIndex)
+  G.piles[pileIndex] = []
+  G.piles[pileIndex].push(G.players[ctx.currentPlayer].playedCard!)
+  delete G.players[ctx.currentPlayer].resolveOrder
+  delete G.players[ctx.currentPlayer].playedCard
+  events.endStage()
 }
 
 export const SixNimmt: Game<GameState> = {
   name: "6Nimmt!",
   setup,
-
-  playerView: (G, ctx, playerID) => {
-    return stripSecrets(G, ctx, playerID!)
-  },
+  playerView: ({ G, playerID }) =>
+    // const isNotThisPlayer: Predicate<PlayerID> = (id, _) => id != playerID
+    ({
+      piles: G.piles,
+      players: filterWithIndex((id: PlayerID, _) => id === playerID)(G.players),
+    }),
 
   turn: {
     minMoves: 1,
     maxMoves: 1,
-    onEnd: (_, ctx) =>
-      console.log(`End of turn ${ctx.turn} for player ${ctx.currentPlayer}`),
   },
 
   phases: {
@@ -241,29 +157,19 @@ export const SixNimmt: Game<GameState> = {
       turn: {
         activePlayers: ActivePlayers.ALL_ONCE,
         minMoves: 1,
-        // maxMoves: 1,
-        // stages: {
-        //   playACard: {
-        //     moves: { playCard },
-        //   },
-        // },
-
-        onEnd: (_, ctx) =>
-          console.log(`End of turn ${ctx.turn} for player ${ctx.currentPlayer}`),
       },
       moves: { playCard },
-      endIf: (G) => Object.values(G.players).every((p) => p.playedCard),
-      onEnd: () => console.log("Ending play phase"),
+      endIf: ({ G }) => Object.values(G.players).every((p) => p.playedCard),
       next: "pileSelection",
     },
     pileSelection: {
       moves: {},
       turn: {
-        activePlayers: { maxMoves: 1 },
+        onBegin: autoSelect,
         maxMoves: 1,
         order: {
           ...TurnOrder.CUSTOM_FROM("resolveOrder"),
-          next: (_G, ctx) => {
+          next: ({ ctx }) => {
             if (ctx.playOrderPos < ctx.numPlayers - 1) {
               return ctx.playOrderPos + 1
             }
@@ -271,22 +177,13 @@ export const SixNimmt: Game<GameState> = {
         },
         stages: {
           playerSelection: {
-            moves: { choosePileMove },
+            moves: {
+              choosePileMove,
+            },
           },
         },
-        onBegin: selectPile,
       },
-      // TODO This hook triggers turn end (again), which runs resolveCard. But
-      // there's no card to resolve, so it fails.
-      // endIf: ({ resolveCounter }, { numPlayers }) => resolveCounter >= numPlayers,
-      // onEnd: (G) => {
-      //   for (const player of Object.values(G.players)) {
-      //     delete player.playedCard
-      //     delete player.resolveOrder
-      //   }
-      // },
       next: "play",
     },
   },
-  endIf: endGame,
 }
