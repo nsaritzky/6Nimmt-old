@@ -16,6 +16,11 @@ const playerView = (
   }
 }
 
+const findByMin = <T>(Obs: T[], measure: (ob: T) => number): T => {
+  const max = Math.min(...Obs.map(measure))
+  return Obs.find((ob) => measure(ob) === max)!
+}
+
 // Game setup /////////////////////////////////////////////////////////////////
 
 const sortedDeck: card[] = cardData.map((bulls, val) => ({
@@ -136,6 +141,12 @@ const choosePileMove: Move<GameState> = (
   events.endStage()
 }
 
+const roundEnd = ({ G, ctx }: FnContext<GameState>) => {
+  if (Object.values(G.players).every((p) => p.hand.length === 0 && ctx.turn > 30)) {
+    return findByMin(Object.entries(G.players), ([_id, p]) => p.score)[0]
+  }
+}
+
 export const SixNimmt: Game<GameState> = {
   name: "6Nimmt!",
   setup,
@@ -186,4 +197,5 @@ export const SixNimmt: Game<GameState> = {
       next: "play",
     },
   },
+  endIf: roundEnd,
 }
