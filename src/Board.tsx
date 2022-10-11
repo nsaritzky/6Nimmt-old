@@ -1,5 +1,7 @@
 import type { BoardProps } from "boardgame.io/react"
 import type { GameState, card } from "./types"
+import ScoreTable from "./components/scoreTable"
+import Hand from "./components/Hand"
 /* import Button from "@mui/material/Button" */
 import { DndContext, useDraggable, useDroppable } from "@dnd-kit/core"
 import { Ctx } from "boardgame.io"
@@ -99,11 +101,12 @@ const Pile = ({ cards }: pileProps) => {
   )
 }
 
-const PileButton = ({ cards, selectPileMove, disabled }: pileButtonProps) => (
+const PileButton = ({ cards, selectPileMove, disabled, index }: pileButtonProps) => (
   <div>
     <button
       onClick={selectPileMove}
       disabled={disabled}
+      aria-label={`pile ${index}`}
       className={"p-2 m-2" + (!disabled ? " group" : "")}
     >
       <Pile cards={cards} />
@@ -120,26 +123,28 @@ const SixNimmtBoard = ({ G, ctx, events, playerID, moves }: SixNimmtProps) => {
         )}
       </div>
       {G.players[playerID!].playedCard && (
-        <div className="card bg-purple-200">
+        <div aria-label="played card" className="card bg-purple-200">
           <Card card={G.players[playerID!].playedCard!} />
         </div>
       )}
-      <div className="flex-1 flex-col">
+      <section aria-label="piles" className="flex-1 flex-col">
         {G.piles.map((cards, key) => (
           <PileButton
             cards={cards}
             key={key}
+            index={key}
             selectPileMove={() => moves.choosePileMove(key)}
             disabled={(ctx.activePlayers || {})[playerID!] != "playerSelection"}
           />
         ))}
-      </div>
+      </section>
       <div className="flex justify-center">
         <EndTurnButton
           endTurn={() => events.endTurn!()}
           disabled={ctx.currentPlayer !== playerID}
         />
       </div>
+      <ScoreTable G={G} />
     </div>
   )
 }

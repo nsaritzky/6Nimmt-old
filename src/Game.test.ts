@@ -51,10 +51,9 @@ test("Double-playing cards", () => {
 
   client0.start()
   client0.moves.playCard(0, 0)
-  client0.moves.playCard(1, 0)
+  expect(() => client0.moves.playCard(1, 0)).toThrowError()
 
   // @ts-ignore
-  expect(client0.getState().G.players[0].hand.length).toBe(9)
   // expect(() => client0.moves.playCard(1, 0))
 })
 
